@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DASHBOARD SEKOLAH BDR DAN TATAP MUKA TAHUN 2026</title>
+<title>Dashboard Sekolah - Tatap Muka & BDR</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root{
     --bg:#f4f6f9; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --border:#e5e7eb;
     --accent:#2563eb; --green:#16a34a; --green-bg:#dcfce7; --orange:#d97706; --orange-bg:#fef3c7;
+    --blue:#2563eb; --blue-bg:#dbeafe;
     --shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
   *{box-sizing:border-box;}
@@ -45,6 +46,7 @@
   tr:last-child td{border-bottom:none;}
   .badge{display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;}
   .badge.tm{background:var(--green-bg); color:var(--green);}
+  .badge.ptmt{background:var(--blue-bg); color:var(--blue);}
   .badge.bdr{background:var(--orange-bg); color:var(--orange);}
   .badge.unk{background:#eef2ff; color:#4f46e5;}
   .empty, .err{text-align:center; padding:40px 16px; color:var(--muted); font-size:14px;}
@@ -58,8 +60,8 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>DASHBOARD SEKOLAH BDR DAN TATAP MUKA TAHUN 2026</h1>
-      <p class="sub">DINAS PENDIDIKAN KABUPATEN KOTAWARINGIN TIMUR</p>
+      <h1>Dashboard Sekolah — Tatap Muka & BDR</h1>
+      <p class="sub">Data langsung dari Google Sheets</p>
     </div>
     <div style="text-align:right;">
       <div class="status-line"><span class="dot" id="statusDot"></span><span id="statusText">Memuat data…</span></div>
@@ -70,6 +72,7 @@
   <div class="cards">
     <div class="card"><div class="num" id="cTotal">-</div><div class="lbl">Total Sekolah</div></div>
     <div class="card"><div class="num" id="cTM" style="color:var(--green)">-</div><div class="lbl">Tatap Muka</div></div>
+    <div class="card"><div class="num" id="cPTMT" style="color:var(--blue)">-</div><div class="lbl">Tatap Muka Terbatas</div></div>
     <div class="card"><div class="num" id="cBDR" style="color:var(--orange)">-</div><div class="lbl">BDR</div></div>
     <div class="card"><div class="num" id="cKec">-</div><div class="lbl">Kecamatan</div></div>
   </div>
@@ -79,6 +82,7 @@
     <select id="kecFilter"><option value="">Semua Kecamatan</option></select>
     <button class="filter-btn active" data-status="">Semua</button>
     <button class="filter-btn" data-status="tm">Tatap Muka</button>
+    <button class="filter-btn" data-status="ptmt">Tatap Muka Terbatas</button>
     <button class="filter-btn" data-status="bdr">BDR</button>
   </div>
 
@@ -144,6 +148,7 @@ function findKey(row, candidates){
 function normalizeStatus(v){
   if(!v) return "unk";
   const s = v.toString().trim().toLowerCase();
+  if(s.includes("terbatas") || s === "ptmt") return "ptmt";
   if(s.includes("tatap") || s === "tm") return "tm";
   if(s.includes("bdr") || s.includes("daring") || s.includes("rumah")) return "bdr";
   return "unk";
@@ -216,11 +221,11 @@ function render(){
     return true;
   });
 
-document.getElementById("cTotal").textContent = filtered.length;
-document.getElementById("cTM").textContent = filtered.filter(r=>r.status==="tm").length;
-document.getElementById("cPTMT").textContent = filtered.filter(r=>r.status==="ptmt").length;
-document.getElementById("cBDR").textContent = filtered.filter(r=>r.status==="bdr").length;
-document.getElementById("cKec").textContent = new Set(allRows.map(r=>r.kecamatan)).size;
+  document.getElementById("cTotal").textContent = filtered.length;
+  document.getElementById("cTM").textContent = filtered.filter(r=>r.status==="tm").length;
+  document.getElementById("cPTMT").textContent = filtered.filter(r=>r.status==="ptmt").length;
+  document.getElementById("cBDR").textContent = filtered.filter(r=>r.status==="bdr").length;
+  document.getElementById("cKec").textContent = new Set(allRows.map(r=>r.kecamatan)).size;
 
   const tbody = document.getElementById("tbody");
   if(!filtered.length){
@@ -228,8 +233,8 @@ document.getElementById("cKec").textContent = new Set(allRows.map(r=>r.kecamatan
     return;
   }
   tbody.innerHTML = filtered.map(r=>{
-    const badgeClass = r.status === "tm" ? "tm" : r.status === "bdr" ? "bdr" : "unk";
-    const label = r.status === "tm" ? "Tatap Muka" : r.status === "bdr" ? "BDR" : (r.statusRaw || "-");
+    const badgeClass = r.status === "tm" ? "tm" : r.status === "ptmt" ? "ptmt" : r.status === "bdr" ? "bdr" : "unk";
+    const label = r.status === "tm" ? "Tatap Muka" : r.status === "ptmt" ? "Tatap Muka Terbatas" : r.status === "bdr" ? "BDR" : (r.statusRaw || "-");
     return `<tr>
       <td>${r.nama}</td>
       <td>${r.kecamatan || "-"}</td>
