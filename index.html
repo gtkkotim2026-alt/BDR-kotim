@@ -60,8 +60,8 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>DINAS PENDIDIKAN KABUPATEN KOTAWARINGIN TIMUR</h1>
-      <p class="sub">Dashboard Adaptasi Kegiatan Pembelajaran di Musim Kemarau 2026</p>
+      <h1>Dashboard Sekolah — Tatap Muka & BDR</h1>
+      <p class="sub">Data langsung dari Google Sheets</p>
     </div>
     <div style="text-align:right;">
       <div class="status-line"><span class="dot" id="statusDot"></span><span id="statusText">Memuat data…</span></div>
@@ -80,6 +80,7 @@
   <div class="controls">
     <input type="text" id="searchBox" placeholder="Cari nama sekolah..." style="flex:1; min-width:180px;">
     <select id="kecFilter"><option value="">Semua Kecamatan</option></select>
+    <select id="hariFilter"></select>
     <button class="filter-btn active" data-status="">Semua</button>
     <button class="filter-btn" data-status="tm">Tatap Muka</button>
     <button class="filter-btn" data-status="ptmt">Tatap Muka Terbatas</button>
@@ -89,16 +90,13 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr>
+        <tr id="theadRow">
           <th>Nama Sekolah</th>
           <th>Kecamatan</th>
-          <th>Status</th>
-          <th>Keterangan</th>
-          <th>Update Terakhir</th>
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="5" class="empty">Memuat data...</td></tr>
+        <tr><td class="empty">Memuat data...</td></tr>
       </tbody>
     </table>
   </div>
@@ -112,12 +110,12 @@
    2. Klik "Bagikan" -> ubah akses jadi "Siapa saja yang memiliki link" (Pembaca/Viewer).
    3. Salin SHEET_ID dari URL: https://docs.google.com/spreadsheets/d/SHEET_ID_DI_SINI/edit
    4. Isi nama tab/sheet-nya di SHEET_NAME (nama tab di bagian bawah spreadsheet).
-   5. Kolom yang dikenali (nama header boleh beda-beda, sistem akan cari otomatis):
-      - Nama Sekolah / Sekolah  (wajib)
+   5. Struktur kolom di spreadsheet:
+      - Nama Sekolah  (wajib)
       - Kecamatan
-      - Status / Kondisi   -> isi "Tatap Muka" atau "BDR"
-      - Keterangan / Catatan
-      - Update Terakhir / Tanggal
+      - Kolom-kolom hari, contoh: "Senin, 21/09/2026", "Selasa, 22/09/2026", dst.
+        Kolom apa saja selain Nama Sekolah & Kecamatan otomatis dianggap kolom hari.
+        Isi tiap sel dengan "Tatap Muka", "Tatap Muka Terbatas", atau "BDR".
 ======================================== */
 const CONFIG = {
   sheetId: "1C7YaeXghR9erSb4evzJL1ADI4CxvCu2ToQmMtaS64FE",
@@ -126,6 +124,7 @@ const CONFIG = {
 };
 
 let allRows = [];
+let dayColumns = [];
 let activeStatus = "";
 
 function csvUrl(){
@@ -170,22 +169,24 @@ async function loadData(){
     const sample = parsed.data[0];
     const kName = findKey(sample, ["nama sekolah","sekolah","nama"]);
     const kKec = findKey(sample, ["kecamatan","kec"]);
-    const kStatus = findKey(sample, ["status","kondisi"]);
-    const kKet = findKey(sample, ["keterangan","catatan"]);
-    const kUpdate = findKey(sample, ["update terakhir","update","tanggal","terakhir diperbarui"]);
+    dayColumns = Object.keys(sample).filter(k => k !== kName && k !== kKec);
 
     allRows = parsed.data
       .filter(r => kName && r[kName] && r[kName].toString().trim() !== "")
-      .map(r => ({
-        nama: kName ? r[kName] : "-",
-        kecamatan: kKec ? r[kKec] : "-",
-        statusRaw: kStatus ? r[kStatus] : "",
-        status: normalizeStatus(kStatus ? r[kStatus] : ""),
-        keterangan: kKet ? r[kKet] : "",
-        update: kUpdate ? r[kUpdate] : ""
-      }));
+      .map(r => {
+        const hari = {};
+        dayColumns.forEach(d => {
+          hari[d] = { raw: r[d] || "", status: normalizeStatus(r[d]) };
+        });
+        return {
+          nama: kName ? r[kName] : "-",
+          kecamatan: kKec ? r[kKec] : "-",
+          hari
+        };
+      });
 
     populateKecFilter();
+    populateHariFilter();
     render();
 
     const now = new Date();
@@ -196,7 +197,7 @@ async function loadData(){
     statusText.textContent = "Gagal memuat data";
     dot.style.background = "#dc2626";
     document.getElementById("tbody").innerHTML =
-      `<tr><td colspan="5" class="err">Gagal mengambil data dari Google Sheets.<br>
+      `<tr><td colspan="12" class="err">Gagal mengambil data dari Google Sheets.<br>
       Pastikan SHEET_ID benar dan sharing sudah "Siapa saja yang memiliki link".<br>
       <code>${err.message}</code></td></tr>`;
   }
@@ -210,43 +211,58 @@ function populateKecFilter(){
   sel.value = current;
 }
 
+function populateHariFilter(){
+  const sel = document.getElementById("hariFilter");
+  const current = sel.value;
+  sel.innerHTML = dayColumns.map(d=>`<option value="${d}">${d}</option>`).join("");
+  sel.value = dayColumns.includes(current) ? current : dayColumns[0];
+}
+
 function render(){
   const search = document.getElementById("searchBox").value.trim().toLowerCase();
   const kec = document.getElementById("kecFilter").value;
+  const selectedDay = document.getElementById("hariFilter").value;
 
   const filtered = allRows.filter(r=>{
-    if(activeStatus && r.status !== activeStatus) return false;
     if(kec && r.kecamatan !== kec) return false;
     if(search && !r.nama.toLowerCase().includes(search)) return false;
+    if(activeStatus && selectedDay && (!r.hari[selectedDay] || r.hari[selectedDay].status !== activeStatus)) return false;
     return true;
   });
 
   document.getElementById("cTotal").textContent = filtered.length;
-  document.getElementById("cTM").textContent = filtered.filter(r=>r.status==="tm").length;
-  document.getElementById("cPTMT").textContent = filtered.filter(r=>r.status==="ptmt").length;
-  document.getElementById("cBDR").textContent = filtered.filter(r=>r.status==="bdr").length;
+  document.getElementById("cTM").textContent = filtered.filter(r=>selectedDay && r.hari[selectedDay] && r.hari[selectedDay].status==="tm").length;
+  document.getElementById("cPTMT").textContent = filtered.filter(r=>selectedDay && r.hari[selectedDay] && r.hari[selectedDay].status==="ptmt").length;
+  document.getElementById("cBDR").textContent = filtered.filter(r=>selectedDay && r.hari[selectedDay] && r.hari[selectedDay].status==="bdr").length;
   document.getElementById("cKec").textContent = new Set(allRows.map(r=>r.kecamatan)).size;
+
+  const theadRow = document.getElementById("theadRow");
+  theadRow.innerHTML = '<th>Nama Sekolah</th><th>Kecamatan</th>' + dayColumns.map(d=>`<th>${d}</th>`).join("");
 
   const tbody = document.getElementById("tbody");
   if(!filtered.length){
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">Tidak ada data yang cocok.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${2+dayColumns.length}" class="empty">Tidak ada data yang cocok.</td></tr>`;
     return;
   }
+  function badgeHtml(cell){
+    if(!cell || !cell.raw) return '<span class="badge unk">-</span>';
+    const cls = cell.status === "tm" ? "tm" : cell.status === "ptmt" ? "ptmt" : cell.status === "bdr" ? "bdr" : "unk";
+    const label = cell.status === "tm" ? "Tatap Muka" : cell.status === "ptmt" ? "Tatap Muka Terbatas" : cell.status === "bdr" ? "BDR" : cell.raw;
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
   tbody.innerHTML = filtered.map(r=>{
-    const badgeClass = r.status === "tm" ? "tm" : r.status === "ptmt" ? "ptmt" : r.status === "bdr" ? "bdr" : "unk";
-    const label = r.status === "tm" ? "Tatap Muka" : r.status === "ptmt" ? "Tatap Muka Terbatas" : r.status === "bdr" ? "BDR" : (r.statusRaw || "-");
+    const dayCells = dayColumns.map(d => `<td>${badgeHtml(r.hari[d])}</td>`).join("");
     return `<tr>
       <td>${r.nama}</td>
       <td>${r.kecamatan || "-"}</td>
-      <td><span class="badge ${badgeClass}">${label}</span></td>
-      <td>${r.keterangan || "-"}</td>
-      <td>${r.update || "-"}</td>
+      ${dayCells}
     </tr>`;
   }).join("");
 }
 
 document.getElementById("searchBox").addEventListener("input", render);
 document.getElementById("kecFilter").addEventListener("change", render);
+document.getElementById("hariFilter").addEventListener("change", render);
 document.getElementById("refreshBtn").addEventListener("click", loadData);
 document.querySelectorAll(".filter-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
