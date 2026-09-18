@@ -216,10 +216,11 @@ function render(){
     return true;
   });
 
-  document.getElementById("cTotal").textContent = allRows.length;
-  document.getElementById("cTM").textContent = allRows.filter(r=>r.status==="tm").length;
-  document.getElementById("cBDR").textContent = allRows.filter(r=>r.status==="bdr").length;
-  document.getElementById("cKec").textContent = new Set(allRows.map(r=>r.kecamatan)).size;
+document.getElementById("cTotal").textContent = filtered.length;
+document.getElementById("cTM").textContent = filtered.filter(r=>r.status==="tm").length;
+document.getElementById("cPTMT").textContent = filtered.filter(r=>r.status==="ptmt").length;
+document.getElementById("cBDR").textContent = filtered.filter(r=>r.status==="bdr").length;
+document.getElementById("cKec").textContent = new Set(allRows.map(r=>r.kecamatan)).size;
 
   const tbody = document.getElementById("tbody");
   if(!filtered.length){
