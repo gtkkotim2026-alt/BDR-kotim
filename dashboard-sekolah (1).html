@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Sekolah - Tatap Muka & BDR</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --border:#e5e7eb;
+    --accent:#2563eb; --green:#16a34a; --green-bg:#dcfce7; --orange:#d97706; --orange-bg:#fef3c7;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding:24px;
+  }
+  .wrap{max-width:1100px; margin:0 auto;}
+  header{display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:20px;}
+  h1{font-size:22px; margin:0 0 4px 0;}
+  .sub{color:var(--muted); font-size:13px; margin:0;}
+  .status-line{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block;}
+  button{
+    background:var(--accent); color:#fff; border:none; padding:8px 14px; border-radius:8px;
+    font-size:13px; cursor:pointer;
+  }
+  button:hover{opacity:0.9;}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:var(--shadow);}
+  .card .num{font-size:26px; font-weight:700;}
+  .card .lbl{font-size:12px; color:var(--muted); margin-top:2px;}
+  .controls{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; align-items:center;}
+  input[type=text], select{
+    padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:#fff;
+  }
+  .filter-btn{
+    background:#fff; color:var(--text); border:1px solid var(--border); padding:7px 12px; border-radius:20px; font-size:13px;
+  }
+  .filter-btn.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  table{width:100%; border-collapse:collapse; background:var(--card); border-radius:12px; overflow:hidden; box-shadow:var(--shadow);}
+  th,td{text-align:left; padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border);}
+  th{background:#f9fafb; color:var(--muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.03em;}
+  tr:last-child td{border-bottom:none;}
+  .badge{display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;}
+  .badge.tm{background:var(--green-bg); color:var(--green);}
+  .badge.bdr{background:var(--orange-bg); color:var(--orange);}
+  .badge.unk{background:#eef2ff; color:#4f46e5;}
+  .empty, .err{text-align:center; padding:40px 16px; color:var(--muted); font-size:14px;}
+  .err{color:#b91c1c;}
+  .table-wrap{overflow-x:auto;}
+  footer{margin-top:16px; text-align:center; font-size:12px; color:var(--muted);}
+  code{background:#eef1f5; padding:1px 6px; border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Dashboard Sekolah — Tatap Muka & BDR</h1>
+      <p class="sub">Data langsung dari Google Sheets</p>
+    </div>
+    <div style="text-align:right;">
+      <div class="status-line"><span class="dot" id="statusDot"></span><span id="statusText">Memuat data…</span></div>
+      <button id="refreshBtn" style="margin-top:6px;">Refresh sekarang</button>
+    </div>
+  </header>
+
+  <div class="cards">
+    <div class="card"><div class="num" id="cTotal">-</div><div class="lbl">Total Sekolah</div></div>
+    <div class="card"><div class="num" id="cTM" style="color:var(--green)">-</div><div class="lbl">Tatap Muka</div></div>
+    <div class="card"><div class="num" id="cBDR" style="color:var(--orange)">-</div><div class="lbl">BDR</div></div>
+    <div class="card"><div class="num" id="cKec">-</div><div class="lbl">Kecamatan</div></div>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="searchBox" placeholder="Cari nama sekolah..." style="flex:1; min-width:180px;">
+    <select id="kecFilter"><option value="">Semua Kecamatan</option></select>
+    <button class="filter-btn active" data-status="">Semua</button>
+    <button class="filter-btn" data-status="tm">Tatap Muka</button>
+    <button class="filter-btn" data-status="bdr">BDR</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nama Sekolah</th>
+          <th>Kecamatan</th>
+          <th>Status</th>
+          <th>Keterangan</th>
+          <th>Update Terakhir</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="5" class="empty">Memuat data...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer id="footerNote">Auto-refresh setiap 60 detik.</footer>
+</div>
+
+<script>
+/* ============ KONFIGURASI ============
+   1. Buka Google Sheets datanya.
+   2. Klik "Bagikan" -> ubah akses jadi "Siapa saja yang memiliki link" (Pembaca/Viewer).
+   3. Salin SHEET_ID dari URL: https://docs.google.com/spreadsheets/d/SHEET_ID_DI_SINI/edit
+   4. Isi nama tab/sheet-nya di SHEET_NAME (nama tab di bagian bawah spreadsheet).
+   5. Kolom yang dikenali (nama header boleh beda-beda, sistem akan cari otomatis):
+      - Nama Sekolah / Sekolah  (wajib)
+      - Kecamatan
+      - Status / Kondisi   -> isi "Tatap Muka" atau "BDR"
+      - Keterangan / Catatan
+      - Update Terakhir / Tanggal
+======================================== */
+const CONFIG = {
+  sheetId: "1C7YaeXghR9erSb4evzJL1ADI4CxvCu2ToQmMtaS64FE",
+  sheetName: "Sheet1",
+  refreshInterval: 60000 // 60 detik
+};
+
+let allRows = [];
+let activeStatus = "";
+
+function csvUrl(){
+  return `https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(CONFIG.sheetName)}&_=${Date.now()}`;
+}
+
+function findKey(row, candidates){
+  const keys = Object.keys(row);
+  for(const c of candidates){
+    const hit = keys.find(k => k.trim().toLowerCase() === c);
+    if(hit) return hit;
+  }
+  for(const c of candidates){
+    const hit = keys.find(k => k.trim().toLowerCase().includes(c));
+    if(hit) return hit;
+  }
+  return null;
+}
+
+function normalizeStatus(v){
+  if(!v) return "unk";
+  const s = v.toString().trim().toLowerCase();
+  if(s.includes("tatap") || s === "tm") return "tm";
+  if(s.includes("bdr") || s.includes("daring") || s.includes("rumah")) return "bdr";
+  return "unk";
+}
+
+async function loadData(){
+  const dot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+  statusText.textContent = "Memuat data...";
+  dot.style.background = "#d97706";
+
+  try{
+    const res = await fetch(csvUrl(), {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+    if(!parsed.data.length) throw new Error("Sheet kosong atau kolom tidak terbaca");
+
+    const sample = parsed.data[0];
+    const kName = findKey(sample, ["nama sekolah","sekolah","nama"]);
+    const kKec = findKey(sample, ["kecamatan","kec"]);
+    const kStatus = findKey(sample, ["status","kondisi"]);
+    const kKet = findKey(sample, ["keterangan","catatan"]);
+    const kUpdate = findKey(sample, ["update terakhir","update","tanggal","terakhir diperbarui"]);
+
+    allRows = parsed.data
+      .filter(r => kName && r[kName] && r[kName].toString().trim() !== "")
+      .map(r => ({
+        nama: kName ? r[kName] : "-",
+        kecamatan: kKec ? r[kKec] : "-",
+        statusRaw: kStatus ? r[kStatus] : "",
+        status: normalizeStatus(kStatus ? r[kStatus] : ""),
+        keterangan: kKet ? r[kKet] : "",
+        update: kUpdate ? r[kUpdate] : ""
+      }));
+
+    populateKecFilter();
+    render();
+
+    const now = new Date();
+    statusText.textContent = "Terakhir sinkron: " + now.toLocaleTimeString("id-ID");
+    dot.style.background = "var(--green)";
+  }catch(err){
+    console.error(err);
+    statusText.textContent = "Gagal memuat data";
+    dot.style.background = "#dc2626";
+    document.getElementById("tbody").innerHTML =
+      `<tr><td colspan="5" class="err">Gagal mengambil data dari Google Sheets.<br>
+      Pastikan SHEET_ID benar dan sharing sudah "Siapa saja yang memiliki link".<br>
+      <code>${err.message}</code></td></tr>`;
+  }
+}
+
+function populateKecFilter(){
+  const sel = document.getElementById("kecFilter");
+  const current = sel.value;
+  const kecs = [...new Set(allRows.map(r => (r.kecamatan||"").trim()).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Semua Kecamatan</option>' + kecs.map(k=>`<option value="${k}">${k}</option>`).join("");
+  sel.value = current;
+}
+
+function render(){
+  const search = document.getElementById("searchBox").value.trim().toLowerCase();
+  const kec = document.getElementById("kecFilter").value;
+
+  const filtered = allRows.filter(r=>{
+    if(activeStatus && r.status !== activeStatus) return false;
+    if(kec && r.kecamatan !== kec) return false;
+    if(search && !r.nama.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  document.getElementById("cTotal").textContent = allRows.length;
+  document.getElementById("cTM").textContent = allRows.filter(r=>r.status==="tm").length;
+  document.getElementById("cBDR").textContent = allRows.filter(r=>r.status==="bdr").length;
+  document.getElementById("cKec").textContent = new Set(allRows.map(r=>r.kecamatan)).size;
+
+  const tbody = document.getElementById("tbody");
+  if(!filtered.length){
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Tidak ada data yang cocok.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(r=>{
+    const badgeClass = r.status === "tm" ? "tm" : r.status === "bdr" ? "bdr" : "unk";
+    const label = r.status === "tm" ? "Tatap Muka" : r.status === "bdr" ? "BDR" : (r.statusRaw || "-");
+    return `<tr>
+      <td>${r.nama}</td>
+      <td>${r.kecamatan || "-"}</td>
+      <td><span class="badge ${badgeClass}">${label}</span></td>
+      <td>${r.keterangan || "-"}</td>
+      <td>${r.update || "-"}</td>
+    </tr>`;
+  }).join("");
+}
+
+document.getElementById("searchBox").addEventListener("input", render);
+document.getElementById("kecFilter").addEventListener("change", render);
+document.getElementById("refreshBtn").addEventListener("click", loadData);
+document.querySelectorAll(".filter-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".filter-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    activeStatus = btn.dataset.status;
+    render();
+  });
+});
+
+loadData();
+setInterval(loadData, CONFIG.refreshInterval);
+</script>
+</body>
+</html>
